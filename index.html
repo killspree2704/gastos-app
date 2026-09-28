@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Gastos</title>
+<meta name="theme-color" content="#166534">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Gastos">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="app">
+
+  <!-- Barra de viaje -->
+  <div id="trip-bar" class="trip-inactive">
+    <div id="trip-info">
+      <span id="trip-status">Sin viaje activo</span>
+      <span id="trip-total"></span>
+    </div>
+    <button id="trip-toggle-btn" class="trip-btn">Iniciar viaje</button>
+  </div>
+
+  <!-- Vista: Registrar -->
+  <main id="view-registrar" class="view active">
+
+    <div id="amount-display">$<span id="amount-value">0</span></div>
+
+    <div id="keypad">
+      <button class="key" data-key="1">1</button>
+      <button class="key" data-key="2">2</button>
+      <button class="key" data-key="3">3</button>
+      <button class="key" data-key="4">4</button>
+      <button class="key" data-key="5">5</button>
+      <button class="key" data-key="6">6</button>
+      <button class="key" data-key="7">7</button>
+      <button class="key" data-key="8">8</button>
+      <button class="key" data-key="9">9</button>
+      <button class="key" data-key=".">.</button>
+      <button class="key" data-key="0">0</button>
+      <button class="key key-back" data-key="back">⌫</button>
+    </div>
+
+    <div id="categories">
+      <button class="cat-btn" data-cat="Caseta" data-emoji="🛣️">🛣️<span>Caseta</span></button>
+      <button class="cat-btn" data-cat="Gasolina" data-emoji="⛽">⛽<span>Gasolina</span></button>
+      <button class="cat-btn" data-cat="Comida" data-emoji="🍔">🍔<span>Comida</span></button>
+      <button class="cat-btn" data-cat="Estacionamiento" data-emoji="🅿️">🅿️<span>Estac.</span></button>
+      <button class="cat-btn" data-cat="Hospedaje" data-emoji="🏨">🏨<span>Hosp.</span></button>
+      <button class="cat-btn" data-cat="Otro" data-emoji="🧾">🧾<span>Otro</span></button>
+    </div>
+
+  </main>
+
+  <!-- Vista: Historial -->
+  <main id="view-historial" class="view">
+    <div id="historial-list"></div>
+  </main>
+
+  <!-- Vista: Detalle de viaje -->
+  <main id="view-detalle" class="view">
+    <button id="detalle-back" class="back-link">← Historial</button>
+    <h2 id="detalle-titulo"></h2>
+    <div id="detalle-total"></div>
+    <div id="detalle-items"></div>
+    <div id="detalle-actions">
+      <button id="btn-copiar" class="action-btn">Copiar resumen</button>
+      <button id="btn-compartir" class="action-btn">Compartir</button>
+      <button id="btn-borrar-viaje" class="action-btn danger">Borrar viaje</button>
+    </div>
+  </main>
+
+  <!-- Tab bar -->
+  <nav id="tabbar">
+    <button class="tab-btn active" data-view="registrar">➕<span>Registrar</span></button>
+    <button class="tab-btn" data-view="historial">📋<span>Historial</span></button>
+  </nav>
+
+  <div id="toast"></div>
+
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
