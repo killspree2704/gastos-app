@@ -487,4 +487,7 @@ window.addEventListener('online', checkForUpdate);
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') checkForUpdate();
 });
-if (navigator.onLine) checkForUpdate();
+// no se filtra por navigator.onLine: en un arranque en frio suele reportar
+// false por un instante aunque ya haya conexion, y el fetch de abajo ya
+// falla solo (silenciosamente) si de verdad no hay red.
+checkForUpdate();
