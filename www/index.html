@@ -18,11 +18,15 @@
 
   <!-- Barra de viaje -->
   <div id="trip-bar" class="trip-inactive">
-    <div id="trip-info">
-      <span id="trip-status">Sin viaje activo</span>
-      <span id="trip-total"></span>
+    <div id="trip-bar-main">
+      <div id="trip-info">
+        <span id="trip-status">Sin viaje activo</span>
+        <span id="trip-total"></span>
+        <span id="trip-deposit"></span>
+      </div>
+      <button id="trip-toggle-btn" class="trip-btn">Iniciar viaje</button>
     </div>
-    <button id="trip-toggle-btn" class="trip-btn">Iniciar viaje</button>
+    <button id="trip-deposit-btn" class="deposit-btn">Registrar depósito</button>
   </div>
 
   <!-- Vista: Registrar -->
@@ -64,8 +68,10 @@
     <button id="detalle-back" class="back-link">← Historial</button>
     <h2 id="detalle-titulo"></h2>
     <div id="detalle-total"></div>
+    <div id="detalle-deposito"></div>
     <div id="detalle-items"></div>
     <div id="detalle-actions">
+      <button id="btn-editar-deposito" class="action-btn">Editar depósito</button>
       <button id="btn-copiar" class="action-btn">Copiar resumen</button>
       <button id="btn-compartir" class="action-btn">Compartir</button>
       <button id="btn-borrar-viaje" class="action-btn danger">Borrar viaje</button>

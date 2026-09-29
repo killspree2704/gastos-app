@@ -32,13 +32,17 @@ function tripTotal(trip) {
   return trip.expenses.reduce((s, e) => s + e.amount, 0);
 }
 
+function tripBalance(trip) {
+  return (trip.deposit || 0) - tripTotal(trip);
+}
+
 function fmt(n) {
   return n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 // ---------- Viaje ----------
 function startTrip() {
-  const trip = { id: uid(), startedAt: Date.now(), endedAt: null, expenses: [] };
+  const trip = { id: uid(), startedAt: Date.now(), endedAt: null, expenses: [], deposit: 0 };
   data.trips.push(trip);
   data.activeTripId = trip.id;
   saveData();
@@ -60,7 +64,7 @@ function addExpense(amount, category) {
   let trip = getActiveTrip();
   let autoStarted = false;
   if (!trip) {
-    trip = { id: uid(), startedAt: Date.now(), endedAt: null, expenses: [] };
+    trip = { id: uid(), startedAt: Date.now(), endedAt: null, expenses: [], deposit: 0 };
     data.trips.push(trip);
     data.activeTripId = trip.id;
     autoStarted = true;
@@ -71,11 +75,50 @@ function addExpense(amount, category) {
   return autoStarted;
 }
 
+// ---------- Depósito de la empresa ----------
+function promptDeposit(current) {
+  const input = prompt('Monto del depósito de la empresa:', current > 0 ? current.toFixed(2) : '');
+  if (input === null) return null;
+  const amount = parseFloat(input);
+  if (isNaN(amount) || amount < 0) {
+    showToast('Monto inválido');
+    return null;
+  }
+  return amount;
+}
+
+function setDepositOnActiveTrip() {
+  let trip = getActiveTrip();
+  let autoStarted = false;
+  if (!trip) {
+    trip = { id: uid(), startedAt: Date.now(), endedAt: null, expenses: [], deposit: 0 };
+    data.trips.push(trip);
+    data.activeTripId = trip.id;
+    autoStarted = true;
+  }
+  const amount = promptDeposit(trip.deposit || 0);
+  if (amount === null) {
+    if (autoStarted) {
+      data.trips.pop();
+      data.activeTripId = null;
+    }
+    return;
+  }
+  trip.deposit = amount;
+  saveData();
+  renderTripBar();
+  showToast(autoStarted
+    ? `Depósito $${fmt(amount)} guardado · viaje iniciado`
+    : `Depósito actualizado: $${fmt(amount)}`);
+}
+
 // ---------- UI: barra de viaje ----------
 const tripBar = document.getElementById('trip-bar');
 const tripStatusEl = document.getElementById('trip-status');
 const tripTotalEl = document.getElementById('trip-total');
+const tripDepositEl = document.getElementById('trip-deposit');
 const tripToggleBtn = document.getElementById('trip-toggle-btn');
+const tripDepositBtn = document.getElementById('trip-deposit-btn');
 
 function renderTripBar() {
   const trip = getActiveTrip();
@@ -84,14 +127,28 @@ function renderTripBar() {
     tripBar.classList.remove('trip-inactive');
     const mins = Math.max(0, Math.round((Date.now() - trip.startedAt) / 60000));
     tripStatusEl.textContent = `Viaje activo · ${mins} min`;
-    tripTotalEl.textContent = `Total: $${fmt(tripTotal(trip))}`;
+    tripTotalEl.textContent = `Gastos: $${fmt(tripTotal(trip))}`;
+    const deposit = trip.deposit || 0;
+    if (deposit > 0) {
+      const balance = tripBalance(trip);
+      tripDepositEl.textContent = `Depósito: $${fmt(deposit)} · Saldo: $${fmt(balance)}`;
+      tripDepositEl.classList.toggle('balance-neg', balance < 0);
+      tripDepositBtn.textContent = 'Editar depósito';
+    } else {
+      tripDepositEl.textContent = 'Sin depósito registrado';
+      tripDepositEl.classList.remove('balance-neg');
+      tripDepositBtn.textContent = 'Registrar depósito';
+    }
     tripToggleBtn.textContent = 'Terminar viaje';
   } else {
     tripBar.classList.remove('trip-active');
     tripBar.classList.add('trip-inactive');
     tripStatusEl.textContent = 'Sin viaje activo';
     tripTotalEl.textContent = '';
+    tripDepositEl.textContent = '';
+    tripDepositEl.classList.remove('balance-neg');
     tripToggleBtn.textContent = 'Iniciar viaje';
+    tripDepositBtn.textContent = 'Registrar depósito';
   }
 }
 
@@ -102,6 +159,8 @@ tripToggleBtn.addEventListener('click', () => {
     startTrip();
   }
 });
+
+tripDepositBtn.addEventListener('click', setDepositOnActiveTrip);
 
 setInterval(renderTripBar, 30000);
 
@@ -183,17 +242,32 @@ function renderHistorial() {
   historialListEl.innerHTML = trips.map(t => {
     const date = new Date(t.startedAt).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
     const active = !t.endedAt;
+    const deposit = t.deposit || 0;
+    const depositLine = deposit > 0
+      ? `<div class="trip-card-sub">Depósito $${fmt(deposit)} · Saldo <span class="${tripBalance(t) < 0 ? 'balance-neg' : ''}">$${fmt(tripBalance(t))}</span></div>`
+      : '';
+    const deleteBtn = active ? '' : `<button class="trip-del-btn" data-del="${t.id}">🗑️ Borrar</button>`;
     return `<div class="trip-card ${active ? 'active-trip' : ''}" data-id="${t.id}">
       <div class="trip-card-top">
         <span>${date}${active ? ' · en curso' : ''}</span>
         <span>$${fmt(tripTotal(t))}</span>
       </div>
       <div class="trip-card-sub">${t.expenses.length} gasto${t.expenses.length === 1 ? '' : 's'}</div>
+      ${depositLine}
+      ${deleteBtn}
     </div>`;
   }).join('');
 }
 
 historialListEl.addEventListener('click', (e) => {
+  const delBtn = e.target.closest('[data-del]');
+  if (delBtn) {
+    if (!confirm('¿Borrar este viaje y todos sus gastos? Esto no se puede deshacer.')) return;
+    data.trips = data.trips.filter(t => t.id !== delBtn.dataset.del);
+    saveData();
+    renderHistorial();
+    return;
+  }
   const card = e.target.closest('.trip-card');
   if (!card) return;
   openDetalle(card.dataset.id);
@@ -204,6 +278,7 @@ historialListEl.addEventListener('click', (e) => {
 let detalleTripId = null;
 const detalleTituloEl = document.getElementById('detalle-titulo');
 const detalleTotalEl = document.getElementById('detalle-total');
+const detalleDepositoEl = document.getElementById('detalle-deposito');
 const detalleItemsEl = document.getElementById('detalle-items');
 
 function openDetalle(tripId) {
@@ -221,7 +296,15 @@ function renderDetalle() {
   if (!trip) { switchView('historial'); return; }
   const dateStart = new Date(trip.startedAt).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' });
   detalleTituloEl.textContent = `Viaje del ${dateStart}`;
-  detalleTotalEl.textContent = `Total: $${fmt(tripTotal(trip))} · ${trip.expenses.length} gasto(s)` + (trip.endedAt ? '' : ' · en curso');
+  detalleTotalEl.textContent = `Gastos: $${fmt(tripTotal(trip))} · ${trip.expenses.length} gasto(s)` + (trip.endedAt ? '' : ' · en curso');
+
+  const deposit = trip.deposit || 0;
+  if (deposit > 0) {
+    const balance = tripBalance(trip);
+    detalleDepositoEl.innerHTML = `Depósito: $${fmt(deposit)} · Saldo: <span class="${balance < 0 ? 'balance-neg' : ''}">$${fmt(balance)}</span>`;
+  } else {
+    detalleDepositoEl.textContent = 'Sin depósito registrado';
+  }
 
   const items = [...trip.expenses].sort((a, b) => a.timestamp - b.timestamp);
   detalleItemsEl.innerHTML = items.map(it => {
@@ -255,6 +338,18 @@ detalleItemsEl.addEventListener('click', (e) => {
 
 document.getElementById('detalle-back').addEventListener('click', () => switchView('historial'));
 
+document.getElementById('btn-editar-deposito').addEventListener('click', () => {
+  const trip = getTrip(detalleTripId);
+  if (!trip) return;
+  const amount = promptDeposit(trip.deposit || 0);
+  if (amount === null) return;
+  trip.deposit = amount;
+  saveData();
+  renderDetalle();
+  renderTripBar();
+  showToast(`Depósito actualizado: $${fmt(amount)}`);
+});
+
 function buildResumenTexto(trip) {
   const dateStart = new Date(trip.startedAt).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' });
   const items = [...trip.expenses].sort((a, b) => a.timestamp - b.timestamp);
@@ -263,7 +358,13 @@ function buildResumenTexto(trip) {
     const time = new Date(it.timestamp).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
     txt += `${time}  ${it.category.padEnd(16, ' ')} $${fmt(it.amount)}\n`;
   });
-  txt += `\nTOTAL: $${fmt(tripTotal(trip))}`;
+  txt += `\nTOTAL GASTOS: $${fmt(tripTotal(trip))}`;
+  const deposit = trip.deposit || 0;
+  if (deposit > 0) {
+    const balance = tripBalance(trip);
+    txt += `\nDEPÓSITO: $${fmt(deposit)}`;
+    txt += `\nSALDO: $${fmt(balance)}` + (balance < 0 ? ' (excedido)' : '');
+  }
   return txt;
 }
 
