@@ -1,5 +1,5 @@
 // ---------- Version de esta build (usada para detectar actualizaciones remotas) ----------
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.0.2';
 
 // ---------- Almacenamiento local (nada sale del telefono) ----------
 const STORAGE_KEY = 'gastos_data_v1';
@@ -79,18 +79,45 @@ function addExpense(amount, category) {
 }
 
 // ---------- Depósito de la empresa ----------
-function promptDeposit(current) {
-  const input = prompt('Monto del depósito de la empresa:', current > 0 ? current.toFixed(2) : '');
-  if (input === null) return null;
-  const amount = parseFloat(input);
-  if (isNaN(amount) || amount < 0) {
-    showToast('Monto inválido');
-    return null;
-  }
-  return amount;
+const depositModal = document.getElementById('deposit-modal');
+const depositInput = document.getElementById('deposit-input');
+let depositResolve = null;
+
+function askDepositAmount(current) {
+  return new Promise((resolve) => {
+    depositResolve = resolve;
+    depositInput.value = current > 0 ? current.toFixed(2) : '';
+    depositModal.classList.add('show');
+    depositInput.focus();
+    depositInput.select();
+  });
 }
 
-function setDepositOnActiveTrip() {
+function closeDepositModal(result) {
+  depositModal.classList.remove('show');
+  if (depositResolve) {
+    depositResolve(result);
+    depositResolve = null;
+  }
+}
+
+document.getElementById('deposit-cancel').addEventListener('click', () => closeDepositModal(null));
+document.getElementById('deposit-save').addEventListener('click', () => {
+  const amount = parseFloat(depositInput.value);
+  if (isNaN(amount) || amount < 0) {
+    showToast('Monto inválido');
+    return;
+  }
+  closeDepositModal(amount);
+});
+depositInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('deposit-save').click();
+});
+depositModal.addEventListener('click', (e) => {
+  if (e.target === depositModal) closeDepositModal(null);
+});
+
+async function setDepositOnActiveTrip() {
   let trip = getActiveTrip();
   let autoStarted = false;
   if (!trip) {
@@ -99,7 +126,7 @@ function setDepositOnActiveTrip() {
     data.activeTripId = trip.id;
     autoStarted = true;
   }
-  const amount = promptDeposit(trip.deposit || 0);
+  const amount = await askDepositAmount(trip.deposit || 0);
   if (amount === null) {
     if (autoStarted) {
       data.trips.pop();
@@ -341,10 +368,10 @@ detalleItemsEl.addEventListener('click', (e) => {
 
 document.getElementById('detalle-back').addEventListener('click', () => switchView('historial'));
 
-document.getElementById('btn-editar-deposito').addEventListener('click', () => {
+document.getElementById('btn-editar-deposito').addEventListener('click', async () => {
   const trip = getTrip(detalleTripId);
   if (!trip) return;
-  const amount = promptDeposit(trip.deposit || 0);
+  const amount = await askDepositAmount(trip.deposit || 0);
   if (amount === null) return;
   trip.deposit = amount;
   saveData();
