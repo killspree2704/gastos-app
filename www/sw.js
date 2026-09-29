@@ -26,16 +26,17 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
   if (new URL(e.request.url).origin !== self.location.origin) return; // no interceptar peticiones externas (ej. chequeo de actualizaciones)
+  // Red primero: el bundle activo puede cambiar por una actualizacion OTA,
+  // y servir la copia en cache antes que la red dejaria viendo la version
+  // vieja justo despues de aplicar una actualizacion. La cache solo se usa
+  // como respaldo cuando no hay conexion.
   e.respondWith(
-    caches.match(e.request).then(cached => {
-      const network = fetch(e.request).then(res => {
-        if (res && res.status === 200) {
-          const copy = res.clone();
-          caches.open(CACHE).then(c => c.put(e.request, copy));
-        }
-        return res;
-      }).catch(() => cached);
-      return cached || network;
-    })
+    fetch(e.request).then(res => {
+      if (res && res.status === 200) {
+        const copy = res.clone();
+        caches.open(CACHE).then(c => c.put(e.request, copy));
+      }
+      return res;
+    }).catch(() => caches.match(e.request))
   );
 });
