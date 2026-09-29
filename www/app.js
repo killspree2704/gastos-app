@@ -1,3 +1,6 @@
+// ---------- Version de esta build (usada para detectar actualizaciones remotas) ----------
+const APP_VERSION = '1.0.0';
+
 // ---------- Almacenamiento local (nada sale del telefono) ----------
 const STORAGE_KEY = 'gastos_data_v1';
 
@@ -414,3 +417,74 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   });
 }
+
+// ---------- Actualizaciones remotas (OTA) ----------
+// Cuando hay internet (wifi o datos), se revisa si hay una version mas nueva
+// publicada en GitHub. Si la hay, se descarga en segundo plano y queda lista
+// para aplicarse sola la proxima vez que la app pase a segundo plano o se
+// vuelva a abrir, sin interrumpir un registro en curso.
+const UPDATE_MANIFEST_URL = 'https://raw.githubusercontent.com/killspree2704/gastos-app/master/update.json';
+const MIN_CHECK_INTERVAL_MS = 5 * 60 * 1000;
+let lastUpdateCheckAt = 0;
+let updateCheckInFlight = false;
+
+function isNewerVersion(remote, local) {
+  const a = String(remote).split('.').map(n => parseInt(n, 10) || 0);
+  const b = String(local).split('.').map(n => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const x = a[i] || 0, y = b[i] || 0;
+    if (x > y) return true;
+    if (x < y) return false;
+  }
+  return false;
+}
+
+function getUpdaterPlugin() {
+  const cap = window.Capacitor;
+  if (!cap || !cap.isNativePlatform || !cap.isNativePlatform()) return null;
+  return (cap.Plugins && cap.Plugins.CapacitorUpdater) || null;
+}
+
+async function checkForUpdate() {
+  const updater = getUpdaterPlugin();
+  if (!updater || updateCheckInFlight) return;
+  const now = Date.now();
+  if (now - lastUpdateCheckAt < MIN_CHECK_INTERVAL_MS) return;
+  lastUpdateCheckAt = now;
+  updateCheckInFlight = true;
+  try {
+    const res = await fetch(UPDATE_MANIFEST_URL, { cache: 'no-store' });
+    if (!res.ok) return;
+    const manifest = await res.json();
+    if (!manifest.version || !manifest.url) return;
+    if (!isNewerVersion(manifest.version, APP_VERSION)) return;
+    const bundle = await updater.download({
+      url: manifest.url,
+      version: manifest.version,
+      checksum: manifest.checksum,
+    });
+    await updater.next({ id: bundle.id });
+  } catch (e) {
+    // sin conexion o error de red: se sigue usando la version actual
+  } finally {
+    updateCheckInFlight = false;
+  }
+}
+
+const updaterPlugin = getUpdaterPlugin();
+if (updaterPlugin) {
+  updaterPlugin.notifyAppReady().catch(() => {});
+}
+
+const LAST_VERSION_KEY = 'gastos_last_version';
+const lastSeenVersion = localStorage.getItem(LAST_VERSION_KEY);
+if (lastSeenVersion && lastSeenVersion !== APP_VERSION) {
+  showToast(`Actualizado a v${APP_VERSION}`);
+}
+localStorage.setItem(LAST_VERSION_KEY, APP_VERSION);
+
+window.addEventListener('online', checkForUpdate);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') checkForUpdate();
+});
+if (navigator.onLine) checkForUpdate();

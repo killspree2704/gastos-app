@@ -1,9 +1,11 @@
-const CACHE = 'gastos-v1';
+const CACHE = 'gastos-v2';
 const ASSETS = [
   './',
   './index.html',
   './style.css',
   './app.js',
+  './capacitor.js',
+  './capacitor-updater.js',
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png'
@@ -23,6 +25,7 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
+  if (new URL(e.request.url).origin !== self.location.origin) return; // no interceptar peticiones externas (ej. chequeo de actualizaciones)
   e.respondWith(
     caches.match(e.request).then(cached => {
       const network = fetch(e.request).then(res => {
