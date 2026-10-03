@@ -1,5 +1,5 @@
 // ---------- Version de esta build (usada para detectar actualizaciones remotas) ----------
-const APP_VERSION = '1.5.0';
+const APP_VERSION = '1.5.1';
 
 // ---------- Iconografia (outline, trazo fino, hereda color via currentColor) ----------
 const ICONS = {
@@ -802,6 +802,26 @@ function blobToBase64(blob) {
   });
 }
 
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Justo al abrir la app el stack de red del WebView a veces no esta listo
+// todavia y el primer fetch falla con "Failed to fetch" aunque haya internet.
+// Reintentamos unas cuantas veces antes de rendirnos.
+async function fetchWithRetry(url, options, attempts = 3, delayMs = 1500) {
+  let lastError;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fetch(url, options);
+    } catch (e) {
+      lastError = e;
+      if (i < attempts - 1) await sleep(delayMs);
+    }
+  }
+  throw lastError;
+}
+
 async function checkForUpdate() {
   const updater = getUpdaterPlugin();
   if (!updater || updateCheckInFlight) return;
@@ -810,7 +830,7 @@ async function checkForUpdate() {
   lastUpdateCheckAt = now;
   updateCheckInFlight = true;
   try {
-    const res = await fetch(UPDATE_MANIFEST_URL, { cache: 'no-store' });
+    const res = await fetchWithRetry(UPDATE_MANIFEST_URL, { cache: 'no-store' });
     if (!res.ok) return;
     const manifest = await res.json();
     if (!manifest.version || !manifest.url) return;
