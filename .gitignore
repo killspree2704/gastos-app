@@ -6,4 +6,5 @@ android/local.properties
 android/captures/
 android/*.iml
 android/.idea/
+android/.ssl/
 *.apk

@@ -1,5 +1,5 @@
 // ---------- Version de esta build (usada para detectar actualizaciones remotas) ----------
-const APP_VERSION = '1.3.1';
+const APP_VERSION = '1.4.1';
 
 // ---------- Almacenamiento local (nada sale del telefono) ----------
 const STORAGE_KEY = 'gastos_data_v1';
@@ -101,19 +101,25 @@ function addExpense(amount, category) {
   return autoStarted;
 }
 
-// ---------- Depósito de la empresa ----------
+// ---------- Modal de monto (deposito, gasto agregado desde el detalle) ----------
 const depositModal = document.getElementById('deposit-modal');
+const depositModalTitle = document.getElementById('deposit-modal-title');
 const depositInput = document.getElementById('deposit-input');
 let depositResolve = null;
 
-function askDepositAmount() {
+function askAmountModal(heading) {
   return new Promise((resolve) => {
     depositResolve = resolve;
+    depositModalTitle.textContent = heading;
     depositInput.value = '';
     depositModal.classList.add('show');
     depositInput.focus();
     depositInput.select();
   });
+}
+
+function askDepositAmount() {
+  return askAmountModal('Nuevo depósito de la empresa');
 }
 
 function closeDepositModal(result) {
@@ -492,6 +498,28 @@ document.getElementById('btn-agregar-deposito').addEventListener('click', async 
   showToast(`Depósito $${fmt(amount)} agregado`);
 });
 
+document.getElementById('btn-editar').addEventListener('click', async () => {
+  const trip = getTrip(detalleTripId);
+  if (!trip) return;
+  try {
+    const amount = await askAmountModal('Monto del gasto');
+    if (amount === null || amount <= 0) return;
+    const categoria = await askTextModal({
+      heading: 'Categoría del gasto',
+      placeholder: 'Ej. Gasolina, Hotel, recarga celular',
+      emptyMsg: 'Escribe una categoría',
+    });
+    if (!categoria) return;
+    trip.expenses.push({ id: uid(), amount, category: categoria, timestamp: Date.now() });
+    saveData();
+    renderDetalle();
+    renderTripBar();
+    showToast(`$${fmt(amount)} · ${categoria} agregado`);
+  } catch (e) {
+    showToast('No se pudo agregar: ' + (e && e.message ? e.message : 'error desconocido'));
+  }
+});
+
 function buildResumenTexto(trip) {
   const dateStart = new Date(trip.startedAt).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' });
   const items = [...trip.expenses].sort((a, b) => a.timestamp - b.timestamp);
@@ -629,11 +657,28 @@ document.getElementById('btn-compartir').addEventListener('click', async () => {
     saveData();
     renderDetalle();
 
+    const blob = await buildResumenImageBlob(trip, titulo);
+
+    // En la app nativa, navigator.share() del WebView no es confiable:
+    // usamos el plugin nativo Share (via Filesystem para escribir la imagen
+    // primero) que si abre el dialogo real de Android.
+    const nativeShare = getSharePlugin();
+    const filesystem = getFilesystemPlugin();
+    if (blob && nativeShare && filesystem) {
+      const base64 = await blobToBase64(blob);
+      const written = await filesystem.writeFile({
+        path: 'gastos-reporte.png',
+        data: base64,
+        directory: 'CACHE',
+      });
+      await nativeShare.share({ title: titulo, dialogTitle: 'Compartir reporte', files: [written.uri] });
+      return;
+    }
+
     // navigator.share() consume el "gesto del usuario" en cuanto se llama una
     // vez (exito o error): llamarlo dos veces seguidas (imagen y luego texto)
     // hace que la segunda SIEMPRE falle. Por eso decidimos de antemano con
     // canShare (que no consume nada) y llamamos a share() una sola vez.
-    const blob = await buildResumenImageBlob(trip, titulo);
     const file = blob ? new File([blob], 'gastos.png', { type: 'image/png' }) : null;
     const puedeCompartirImagen = !!(file && navigator.canShare && navigator.canShare({ files: [file] }));
 
@@ -706,6 +751,33 @@ function getUpdaterPlugin() {
   const cap = window.Capacitor;
   if (!cap || !cap.isNativePlatform || !cap.isNativePlatform()) return null;
   return (cap.Plugins && cap.Plugins.CapacitorUpdater) || null;
+}
+
+// navigator.share() del WebView de Android no funciona de forma confiable
+// dentro de apps Capacitor (el navegador "dice" que lo soporta pero el
+// dialogo nativo nunca aparece). Usamos el plugin nativo Share en su lugar.
+function getSharePlugin() {
+  const cap = window.Capacitor;
+  if (!cap || !cap.isNativePlatform || !cap.isNativePlatform()) return null;
+  return (cap.Plugins && cap.Plugins.Share) || null;
+}
+
+function getFilesystemPlugin() {
+  const cap = window.Capacitor;
+  if (!cap || !cap.isNativePlatform || !cap.isNativePlatform()) return null;
+  return (cap.Plugins && cap.Plugins.Filesystem) || null;
+}
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = String(reader.result || '');
+      resolve(result.split(',')[1] || '');
+    };
+    reader.onerror = () => reject(reader.error || new Error('No se pudo leer la imagen'));
+    reader.readAsDataURL(blob);
+  });
 }
 
 async function checkForUpdate() {
