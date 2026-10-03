@@ -1,5 +1,5 @@
 // ---------- Version de esta build (usada para detectar actualizaciones remotas) ----------
-const APP_VERSION = '1.0.2';
+const APP_VERSION = '1.1.0';
 
 // ---------- Almacenamiento local (nada sale del telefono) ----------
 const STORAGE_KEY = 'gastos_data_v1';
@@ -16,7 +16,18 @@ function saveData() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 }
 
-let data = loadData();
+function migrateData(d) {
+  d.trips.forEach(t => {
+    if (!Array.isArray(t.deposits)) {
+      t.deposits = (t.deposit && t.deposit > 0)
+        ? [{ id: uid(), amount: t.deposit, timestamp: t.startedAt }]
+        : [];
+    }
+  });
+  return d;
+}
+
+let data = migrateData(loadData());
 
 function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -35,8 +46,12 @@ function tripTotal(trip) {
   return trip.expenses.reduce((s, e) => s + e.amount, 0);
 }
 
+function depositsTotal(trip) {
+  return (trip.deposits || []).reduce((s, d) => s + d.amount, 0);
+}
+
 function tripBalance(trip) {
-  return (trip.deposit || 0) - tripTotal(trip);
+  return depositsTotal(trip) - tripTotal(trip);
 }
 
 function fmt(n) {
@@ -45,7 +60,7 @@ function fmt(n) {
 
 // ---------- Viaje ----------
 function startTrip() {
-  const trip = { id: uid(), startedAt: Date.now(), endedAt: null, expenses: [], deposit: 0 };
+  const trip = { id: uid(), startedAt: Date.now(), endedAt: null, expenses: [], deposits: [] };
   data.trips.push(trip);
   data.activeTripId = trip.id;
   saveData();
@@ -67,7 +82,7 @@ function addExpense(amount, category) {
   let trip = getActiveTrip();
   let autoStarted = false;
   if (!trip) {
-    trip = { id: uid(), startedAt: Date.now(), endedAt: null, expenses: [], deposit: 0 };
+    trip = { id: uid(), startedAt: Date.now(), endedAt: null, expenses: [], deposits: [] };
     data.trips.push(trip);
     data.activeTripId = trip.id;
     autoStarted = true;
@@ -83,10 +98,10 @@ const depositModal = document.getElementById('deposit-modal');
 const depositInput = document.getElementById('deposit-input');
 let depositResolve = null;
 
-function askDepositAmount(current) {
+function askDepositAmount() {
   return new Promise((resolve) => {
     depositResolve = resolve;
-    depositInput.value = current > 0 ? current.toFixed(2) : '';
+    depositInput.value = '';
     depositModal.classList.add('show');
     depositInput.focus();
     depositInput.select();
@@ -104,7 +119,7 @@ function closeDepositModal(result) {
 document.getElementById('deposit-cancel').addEventListener('click', () => closeDepositModal(null));
 document.getElementById('deposit-save').addEventListener('click', () => {
   const amount = parseFloat(depositInput.value);
-  if (isNaN(amount) || amount < 0) {
+  if (isNaN(amount) || amount <= 0) {
     showToast('Monto inválido');
     return;
   }
@@ -117,16 +132,16 @@ depositModal.addEventListener('click', (e) => {
   if (e.target === depositModal) closeDepositModal(null);
 });
 
-async function setDepositOnActiveTrip() {
+async function addDepositOnActiveTrip() {
   let trip = getActiveTrip();
   let autoStarted = false;
   if (!trip) {
-    trip = { id: uid(), startedAt: Date.now(), endedAt: null, expenses: [], deposit: 0 };
+    trip = { id: uid(), startedAt: Date.now(), endedAt: null, expenses: [], deposits: [] };
     data.trips.push(trip);
     data.activeTripId = trip.id;
     autoStarted = true;
   }
-  const amount = await askDepositAmount(trip.deposit || 0);
+  const amount = await askDepositAmount();
   if (amount === null) {
     if (autoStarted) {
       data.trips.pop();
@@ -134,13 +149,51 @@ async function setDepositOnActiveTrip() {
     }
     return;
   }
-  trip.deposit = amount;
+  trip.deposits.push({ id: uid(), amount, timestamp: Date.now() });
   saveData();
   renderTripBar();
   showToast(autoStarted
     ? `Depósito $${fmt(amount)} guardado · viaje iniciado`
-    : `Depósito actualizado: $${fmt(amount)}`);
+    : `Depósito $${fmt(amount)} agregado`);
 }
+
+// ---------- Descripcion libre (categoria "Otro") ----------
+const descModal = document.getElementById('desc-modal');
+const descInput = document.getElementById('desc-input');
+let descResolve = null;
+
+function askDescription() {
+  return new Promise((resolve) => {
+    descResolve = resolve;
+    descInput.value = '';
+    descModal.classList.add('show');
+    descInput.focus();
+  });
+}
+
+function closeDescModal(result) {
+  descModal.classList.remove('show');
+  if (descResolve) {
+    descResolve(result);
+    descResolve = null;
+  }
+}
+
+document.getElementById('desc-cancel').addEventListener('click', () => closeDescModal(null));
+document.getElementById('desc-save').addEventListener('click', () => {
+  const text = descInput.value.trim();
+  if (!text) {
+    showToast('Escribe una descripción');
+    return;
+  }
+  closeDescModal(text);
+});
+descInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('desc-save').click();
+});
+descModal.addEventListener('click', (e) => {
+  if (e.target === descModal) closeDescModal(null);
+});
 
 // ---------- UI: barra de viaje ----------
 const tripBar = document.getElementById('trip-bar');
@@ -158,17 +211,16 @@ function renderTripBar() {
     const mins = Math.max(0, Math.round((Date.now() - trip.startedAt) / 60000));
     tripStatusEl.textContent = `Viaje activo · ${mins} min`;
     tripTotalEl.textContent = `Gastos: $${fmt(tripTotal(trip))}`;
-    const deposit = trip.deposit || 0;
+    const deposit = depositsTotal(trip);
     if (deposit > 0) {
       const balance = tripBalance(trip);
-      tripDepositEl.textContent = `Depósito: $${fmt(deposit)} · Saldo: $${fmt(balance)}`;
+      tripDepositEl.textContent = `Depósitos: $${fmt(deposit)} · Saldo: $${fmt(balance)}`;
       tripDepositEl.classList.toggle('balance-neg', balance < 0);
-      tripDepositBtn.textContent = 'Editar depósito';
     } else {
       tripDepositEl.textContent = 'Sin depósito registrado';
       tripDepositEl.classList.remove('balance-neg');
-      tripDepositBtn.textContent = 'Registrar depósito';
     }
+    tripDepositBtn.textContent = 'Agregar depósito';
     tripToggleBtn.textContent = 'Terminar viaje';
   } else {
     tripBar.classList.remove('trip-active');
@@ -178,7 +230,7 @@ function renderTripBar() {
     tripDepositEl.textContent = '';
     tripDepositEl.classList.remove('balance-neg');
     tripToggleBtn.textContent = 'Iniciar viaje';
-    tripDepositBtn.textContent = 'Registrar depósito';
+    tripDepositBtn.textContent = 'Agregar depósito';
   }
 }
 
@@ -190,7 +242,7 @@ tripToggleBtn.addEventListener('click', () => {
   }
 });
 
-tripDepositBtn.addEventListener('click', setDepositOnActiveTrip);
+tripDepositBtn.addEventListener('click', addDepositOnActiveTrip);
 
 setInterval(renderTripBar, 30000);
 
@@ -228,7 +280,7 @@ function showToast(msg) {
   toastTimer = setTimeout(() => toastEl.classList.remove('show'), 1400);
 }
 
-document.getElementById('categories').addEventListener('click', (e) => {
+document.getElementById('categories').addEventListener('click', async (e) => {
   const btn = e.target.closest('.cat-btn');
   if (!btn) return;
   const amount = parseFloat(amountStr);
@@ -236,12 +288,18 @@ document.getElementById('categories').addEventListener('click', (e) => {
     showToast('Ingresa un monto');
     return;
   }
-  const autoStarted = addExpense(amount, btn.dataset.cat);
+  let category = btn.dataset.cat;
+  if (category === '__custom__') {
+    const desc = await askDescription();
+    if (!desc) return;
+    category = desc;
+  }
+  const autoStarted = addExpense(amount, category);
   btn.classList.add('flash');
   setTimeout(() => btn.classList.remove('flash'), 200);
   showToast(autoStarted
     ? `$${fmt(amount)} guardado · viaje iniciado`
-    : `$${fmt(amount)} · ${btn.dataset.cat} guardado`);
+    : `$${fmt(amount)} · ${category} guardado`);
   amountStr = '0';
   renderAmount();
 });
@@ -272,7 +330,7 @@ function renderHistorial() {
   historialListEl.innerHTML = trips.map(t => {
     const date = new Date(t.startedAt).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
     const active = !t.endedAt;
-    const deposit = t.deposit || 0;
+    const deposit = depositsTotal(t);
     const depositLine = deposit > 0
       ? `<div class="trip-card-sub">Depósito $${fmt(deposit)} · Saldo <span class="${tripBalance(t) < 0 ? 'balance-neg' : ''}">$${fmt(tripBalance(t))}</span></div>`
       : '';
@@ -309,6 +367,7 @@ let detalleTripId = null;
 const detalleTituloEl = document.getElementById('detalle-titulo');
 const detalleTotalEl = document.getElementById('detalle-total');
 const detalleDepositoEl = document.getElementById('detalle-deposito');
+const detalleDepositosEl = document.getElementById('detalle-depositos');
 const detalleItemsEl = document.getElementById('detalle-items');
 
 function openDetalle(tripId) {
@@ -328,13 +387,31 @@ function renderDetalle() {
   detalleTituloEl.textContent = `Viaje del ${dateStart}`;
   detalleTotalEl.textContent = `Gastos: $${fmt(tripTotal(trip))} · ${trip.expenses.length} gasto(s)` + (trip.endedAt ? '' : ' · en curso');
 
-  const deposit = trip.deposit || 0;
+  const deposit = depositsTotal(trip);
   if (deposit > 0) {
     const balance = tripBalance(trip);
-    detalleDepositoEl.innerHTML = `Depósito: $${fmt(deposit)} · Saldo: <span class="${balance < 0 ? 'balance-neg' : ''}">$${fmt(balance)}</span>`;
+    detalleDepositoEl.innerHTML = `Depósitos: $${fmt(deposit)} · Saldo: <span class="${balance < 0 ? 'balance-neg' : ''}">$${fmt(balance)}</span>`;
   } else {
     detalleDepositoEl.textContent = 'Sin depósito registrado';
   }
+
+  const deposits = [...(trip.deposits || [])].sort((a, b) => a.timestamp - b.timestamp);
+  detalleDepositosEl.innerHTML = deposits.map(d => {
+    const time = new Date(d.timestamp).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+    return `<div class="item-row" data-id="${d.id}">
+      <div class="item-left">
+        <span>💰</span>
+        <span>
+          <div>Depósito</div>
+          <div class="item-cat">${time}</div>
+        </span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span class="item-amount">$${fmt(d.amount)}</span>
+        <button class="item-del" data-del="${d.id}">✕</button>
+      </div>
+    </div>`;
+  }).join('');
 
   const items = [...trip.expenses].sort((a, b) => a.timestamp - b.timestamp);
   detalleItemsEl.innerHTML = items.map(it => {
@@ -366,18 +443,29 @@ detalleItemsEl.addEventListener('click', (e) => {
   renderTripBar();
 });
 
-document.getElementById('detalle-back').addEventListener('click', () => switchView('historial'));
-
-document.getElementById('btn-editar-deposito').addEventListener('click', async () => {
+detalleDepositosEl.addEventListener('click', (e) => {
+  const delBtn = e.target.closest('[data-del]');
+  if (!delBtn) return;
   const trip = getTrip(detalleTripId);
   if (!trip) return;
-  const amount = await askDepositAmount(trip.deposit || 0);
-  if (amount === null) return;
-  trip.deposit = amount;
+  trip.deposits = (trip.deposits || []).filter(d => d.id !== delBtn.dataset.del);
   saveData();
   renderDetalle();
   renderTripBar();
-  showToast(`Depósito actualizado: $${fmt(amount)}`);
+});
+
+document.getElementById('detalle-back').addEventListener('click', () => switchView('historial'));
+
+document.getElementById('btn-agregar-deposito').addEventListener('click', async () => {
+  const trip = getTrip(detalleTripId);
+  if (!trip) return;
+  const amount = await askDepositAmount();
+  if (amount === null) return;
+  trip.deposits.push({ id: uid(), amount, timestamp: Date.now() });
+  saveData();
+  renderDetalle();
+  renderTripBar();
+  showToast(`Depósito $${fmt(amount)} agregado`);
 });
 
 function buildResumenTexto(trip) {
@@ -389,10 +477,16 @@ function buildResumenTexto(trip) {
     txt += `${time}  ${it.category.padEnd(16, ' ')} $${fmt(it.amount)}\n`;
   });
   txt += `\nTOTAL GASTOS: $${fmt(tripTotal(trip))}`;
-  const deposit = trip.deposit || 0;
+  const deposits = [...(trip.deposits || [])].sort((a, b) => a.timestamp - b.timestamp);
+  const deposit = depositsTotal(trip);
   if (deposit > 0) {
+    txt += `\n\nDEPÓSITOS:`;
+    deposits.forEach(d => {
+      const time = new Date(d.timestamp).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+      txt += `\n${time}  $${fmt(d.amount)}`;
+    });
     const balance = tripBalance(trip);
-    txt += `\nDEPÓSITO: $${fmt(deposit)}`;
+    txt += `\nTOTAL DEPÓSITOS: $${fmt(deposit)}`;
     txt += `\nSALDO: $${fmt(balance)}` + (balance < 0 ? ' (excedido)' : '');
   }
   return txt;

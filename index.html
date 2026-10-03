@@ -26,7 +26,7 @@
       </div>
       <button id="trip-toggle-btn" class="trip-btn">Iniciar viaje</button>
     </div>
-    <button id="trip-deposit-btn" class="deposit-btn">Registrar depósito</button>
+    <button id="trip-deposit-btn" class="deposit-btn">Agregar depósito</button>
   </div>
 
   <!-- Vista: Registrar -->
@@ -54,6 +54,7 @@
       <button class="cat-btn" data-cat="Gasolina" data-emoji="⛽">⛽<span>Gasolina</span></button>
       <button class="cat-btn" data-cat="Estacionamiento" data-emoji="🅿️">🅿️<span>Estac.</span></button>
       <button class="cat-btn" data-cat="Hotel" data-emoji="🏨">🏨<span>Hotel</span></button>
+      <button class="cat-btn cat-otro" data-cat="__custom__">✏️<span>Otro</span></button>
     </div>
 
   </main>
@@ -69,9 +70,10 @@
     <h2 id="detalle-titulo"></h2>
     <div id="detalle-total"></div>
     <div id="detalle-deposito"></div>
+    <div id="detalle-depositos"></div>
     <div id="detalle-items"></div>
     <div id="detalle-actions">
-      <button id="btn-editar-deposito" class="action-btn">Editar depósito</button>
+      <button id="btn-agregar-deposito" class="action-btn">Agregar depósito</button>
       <button id="btn-copiar" class="action-btn">Copiar resumen</button>
       <button id="btn-compartir" class="action-btn">Compartir</button>
       <button id="btn-borrar-viaje" class="action-btn danger">Borrar viaje</button>
@@ -88,11 +90,22 @@
 
   <div id="deposit-modal" class="modal-overlay">
     <div class="modal-box">
-      <h3>Depósito de la empresa</h3>
+      <h3>Nuevo depósito de la empresa</h3>
       <input id="deposit-input" type="text" inputmode="decimal" enterkeyhint="done" placeholder="0.00">
       <div class="modal-actions">
         <button id="deposit-cancel" class="modal-btn">Cancelar</button>
         <button id="deposit-save" class="modal-btn primary">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="desc-modal" class="modal-overlay">
+    <div class="modal-box">
+      <h3>Descripción del gasto</h3>
+      <input id="desc-input" type="text" enterkeyhint="done" placeholder="Ej. recarga celular, comida, herramienta">
+      <div class="modal-actions">
+        <button id="desc-cancel" class="modal-btn">Cancelar</button>
+        <button id="desc-save" class="modal-btn primary">Guardar</button>
       </div>
     </div>
   </div>
