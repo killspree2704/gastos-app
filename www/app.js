@@ -1,5 +1,5 @@
 // ---------- Version de esta build (usada para detectar actualizaciones remotas) ----------
-const APP_VERSION = '1.5.2';
+const APP_VERSION = '1.5.3';
 
 // ---------- Iconografia (outline, trazo fino, hereda color via currentColor) ----------
 const ICONS = {

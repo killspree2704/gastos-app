@@ -107,18 +107,24 @@ function syncWww() {
   }
 }
 
+const BSDTAR = 'C:\\Windows\\System32\\tar.exe';
+
 function zipWww(outFile) {
   rmrf(outFile);
   fs.mkdirSync(path.dirname(outFile), { recursive: true });
-  // Compress-Archive (PowerShell, incluido en Windows) para no depender de
-  // ninguna libreria de zip externa. Cada entrada se agrega por su cuenta
-  // para que queden como archivos/carpetas sueltos en la raiz del zip
-  // (igual que los releases anteriores), no envueltos en una sola carpeta.
-  const paths = BUNDLE_ENTRIES.map(e => path.join(WWW, e));
-  const psPaths = paths.map(p => `'${p.replace(/'/g, "''")}'`).join(',');
-  const cmd = `Compress-Archive -Path ${psPaths} -DestinationPath '${outFile.replace(/'/g, "''")}' -CompressionLevel Optimal -Force`;
-  execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', cmd], { stdio: 'inherit' });
-  if (!fs.existsSync(outFile)) fail(`Compress-Archive no genero ${outFile}`);
+  // PowerShell Compress-Archive guarda las rutas internas con "\" (estilo
+  // Windows). CapacitorUpdater en Android las rechaza con "Unzip failed:
+  // Windows path not supported" y la actualizacion se queda descargada pero
+  // nunca se aplica. bsdtar (incluido en Windows 10/11 en System32\tar.exe)
+  // escribe los zips con "/" como cualquier herramienta POSIX, que es lo que
+  // Android espera. -C cambia de directorio antes de agregar para que las
+  // entradas queden sueltas en la raiz del zip, no envueltas en una carpeta.
+  execFileSync(
+    BSDTAR,
+    ['--format=zip', '-cf', outFile, '-C', WWW, ...BUNDLE_ENTRIES],
+    { stdio: 'inherit' }
+  );
+  if (!fs.existsSync(outFile)) fail(`bsdtar no genero ${outFile}`);
 }
 
 function sha256(file) {
