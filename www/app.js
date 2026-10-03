@@ -1,5 +1,5 @@
 // ---------- Version de esta build (usada para detectar actualizaciones remotas) ----------
-const APP_VERSION = '1.3.0';
+const APP_VERSION = '1.3.1';
 
 // ---------- Almacenamiento local (nada sale del telefono) ----------
 const STORAGE_KEY = 'gastos_data_v1';
@@ -629,32 +629,31 @@ document.getElementById('btn-compartir').addEventListener('click', async () => {
     saveData();
     renderDetalle();
 
+    // navigator.share() consume el "gesto del usuario" en cuanto se llama una
+    // vez (exito o error): llamarlo dos veces seguidas (imagen y luego texto)
+    // hace que la segunda SIEMPRE falle. Por eso decidimos de antemano con
+    // canShare (que no consume nada) y llamamos a share() una sola vez.
     const blob = await buildResumenImageBlob(trip, titulo);
-    if (blob) {
-      const file = new File([blob], 'gastos.png', { type: 'image/png' });
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        try {
-          await navigator.share({ files: [file], title: titulo });
-          return;
-        } catch (e) {
-          if (e && e.name === 'AbortError') return; // usuario cancelo el dialogo
-          // cualquier otro error: caemos al respaldo de abajo
-        }
-      }
-    }
+    const file = blob ? new File([blob], 'gastos.png', { type: 'image/png' }) : null;
+    const puedeCompartirImagen = !!(file && navigator.canShare && navigator.canShare({ files: [file] }));
 
-    // Respaldo: el telefono no soporta compartir imagenes (o fallo generarla).
-    // Intentamos compartir el resumen como texto antes de rendirnos.
     if (navigator.share) {
       try {
-        await navigator.share({ text: buildResumenTexto(trip), title: titulo });
+        if (puedeCompartirImagen) {
+          await navigator.share({ files: [file], title: titulo });
+        } else {
+          await navigator.share({ text: buildResumenTexto(trip), title: titulo });
+        }
         return;
       } catch (e) {
-        if (e && e.name === 'AbortError') return;
+        if (e && e.name === 'AbortError') return; // usuario cancelo el dialogo
+        // cualquier otro error: caemos al portapapeles
       }
     }
     await navigator.clipboard.writeText(buildResumenTexto(trip));
-    showToast('Tu teléfono no soporta compartir imágenes: se copió el resumen en texto');
+    showToast(puedeCompartirImagen
+      ? 'No se pudo compartir: se copió el resumen en texto'
+      : 'Tu teléfono no soporta compartir imágenes: se copió el resumen en texto');
   } catch (e) {
     showToast('No se pudo compartir: ' + (e && e.message ? e.message : 'error desconocido'));
   }
