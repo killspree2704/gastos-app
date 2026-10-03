@@ -1,5 +1,5 @@
 // ---------- Version de esta build (usada para detectar actualizaciones remotas) ----------
-const APP_VERSION = '1.5.3';
+const APP_VERSION = '1.5.4';
 
 // ---------- Iconografia (outline, trazo fino, hereda color via currentColor) ----------
 const ICONS = {
@@ -830,7 +830,12 @@ async function checkForUpdate() {
   lastUpdateCheckAt = now;
   updateCheckInFlight = true;
   try {
-    const res = await fetchWithRetry(UPDATE_MANIFEST_URL, { cache: 'no-store' });
+    // raw.githubusercontent.com cachea cada URL varios minutos en su CDN; sin
+    // esto la app puede seguir viendo (y reintentando aplicar) un manifiesto
+    // viejo justo despues de publicar uno nuevo. "cache:no-store" solo evita
+    // la cache local del WebView, no la del CDN, asi que se agrega un
+    // parametro distinto en cada chequeo para forzar una respuesta fresca.
+    const res = await fetchWithRetry(`${UPDATE_MANIFEST_URL}?cb=${now}`, { cache: 'no-store' });
     if (!res.ok) return;
     const manifest = await res.json();
     if (!manifest.version || !manifest.url) return;
