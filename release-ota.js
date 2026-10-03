@@ -127,6 +127,27 @@ function zipWww(outFile) {
   if (!fs.existsSync(outFile)) fail(`bsdtar no genero ${outFile}`);
 }
 
+// Red de seguridad contra el bug exacto que dejo v1.5.2 sin aplicarse:
+// si algun dia se vuelve a generar el zip con una herramienta que escriba
+// rutas estilo Windows (o CapacitorUpdater cambia que rutas acepta), esto
+// detiene el release en vez de publicar un bundle que se queda descargado
+// pero nunca se instala en el telefono.
+function verifyZipEntries(zipFile) {
+  const listing = execFileSync(BSDTAR, ['-tf', zipFile], { encoding: 'utf8' });
+  const entries = listing.split(/\r?\n/).filter(Boolean);
+  if (!entries.length) fail(`${zipFile} no tiene entradas; algo salio mal al zipear`);
+  const bad = entries.filter(e => e.includes('\\'));
+  if (bad.length) {
+    fail(`el zip tiene rutas con "\\" (Android las rechaza): ${bad.join(', ')}`);
+  }
+  for (const needed of BUNDLE_ENTRIES) {
+    const prefix = needed.replace(/\\/g, '/');
+    if (!entries.some(e => e === prefix || e.startsWith(prefix + '/'))) {
+      fail(`${zipFile} no incluye "${needed}"; el bundle quedaria incompleto`);
+    }
+  }
+}
+
 function sha256(file) {
   return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 }
@@ -161,6 +182,9 @@ function main() {
   const zipPath = path.join(OTA_DIR, zipName);
   zipWww(zipPath);
   console.log(`[release-ota] zip generado: ota-releases/${zipName}`);
+
+  verifyZipEntries(zipPath);
+  console.log('[release-ota] zip verificado: rutas POSIX y bundle completo');
 
   const checksum = sha256(zipPath);
   const verify = sha256(zipPath);
