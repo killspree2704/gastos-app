@@ -1,5 +1,5 @@
 // ---------- Version de esta build (usada para detectar actualizaciones remotas) ----------
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.2.0';
 
 // ---------- Almacenamiento local (nada sale del telefono) ----------
 const STORAGE_KEY = 'gastos_data_v1';
@@ -56,6 +56,10 @@ function tripBalance(trip) {
 
 function fmt(n) {
   return n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function fmtMoney(n) {
+  return (n < 0 ? '-$' : '$') + fmt(Math.abs(n));
 }
 
 // ---------- Viaje ----------
@@ -492,6 +496,87 @@ function buildResumenTexto(trip) {
   return txt;
 }
 
+// ---------- Resumen en imagen (tabla, para compartir por WhatsApp) ----------
+function resumenTitulo(trip) {
+  const dateStart = new Date(trip.startedAt).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' });
+  return `Gastos viaje ${dateStart}`;
+}
+
+function buildResumenFilas(trip) {
+  const orden = [];
+  const totales = {};
+  trip.expenses.forEach(e => {
+    if (!(e.category in totales)) {
+      totales[e.category] = 0;
+      orden.push(e.category);
+    }
+    totales[e.category] += e.amount;
+  });
+  const filas = orden.map(cat => ({ label: cat, amount: totales[cat] }));
+  const deposit = depositsTotal(trip);
+  if (deposit > 0) {
+    filas.push({ label: 'Restan', amount: tripBalance(trip) });
+  }
+  return filas;
+}
+
+function buildResumenImageBlob(trip) {
+  const filas = buildResumenFilas(trip);
+  const titulo = resumenTitulo(trip);
+
+  const width = 720;
+  const rowH = 56;
+  const headerH = 64;
+  const height = headerH + Math.max(filas.length, 1) * rowH;
+  const colX = Math.round(width * 0.62);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.strokeStyle = '#444444';
+  ctx.lineWidth = 2;
+  ctx.fillStyle = '#000000';
+  ctx.textBaseline = 'middle';
+
+  ctx.strokeRect(1, 1, width - 2, height - 2);
+
+  ctx.font = 'bold 28px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText(titulo, 16, headerH / 2);
+  ctx.beginPath();
+  ctx.moveTo(0, headerH);
+  ctx.lineTo(width, headerH);
+  ctx.stroke();
+
+  ctx.font = '26px sans-serif';
+  filas.forEach((f, i) => {
+    const y = headerH + i * rowH;
+    if (i > 0) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(width, y);
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.moveTo(colX, y);
+    ctx.lineTo(colX, y + rowH);
+    ctx.stroke();
+
+    ctx.textAlign = 'left';
+    ctx.fillText(f.label, 16, y + rowH / 2);
+
+    ctx.textAlign = 'right';
+    ctx.fillText(fmtMoney(f.amount), width - 16, y + rowH / 2);
+  });
+
+  return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+}
+
 document.getElementById('btn-copiar').addEventListener('click', async () => {
   const trip = getTrip(detalleTripId);
   if (!trip) return;
@@ -507,14 +592,29 @@ document.getElementById('btn-copiar').addEventListener('click', async () => {
 document.getElementById('btn-compartir').addEventListener('click', async () => {
   const trip = getTrip(detalleTripId);
   if (!trip) return;
-  const txt = buildResumenTexto(trip);
-  if (navigator.share) {
-    try { await navigator.share({ text: txt, title: 'Reporte de gastos' }); }
-    catch (e) {}
-  } else {
-    try { await navigator.clipboard.writeText(txt); showToast('Copiado (compartir no disponible)'); }
-    catch (e) {}
+  const blob = await buildResumenImageBlob(trip);
+  if (!blob) {
+    showToast('No se pudo generar la imagen');
+    return;
   }
+  const file = new File([blob], 'gastos.png', { type: 'image/png' });
+
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: 'Reporte de gastos' });
+    } catch (e) {
+      // usuario cancelo el dialogo de compartir: no hacer nada mas
+    }
+    return;
+  }
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'gastos.png';
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Imagen descargada (compartir no disponible)');
 });
 
 document.getElementById('btn-borrar-viaje').addEventListener('click', () => {
