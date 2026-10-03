@@ -1,5 +1,5 @@
 // ---------- Version de esta build (usada para detectar actualizaciones remotas) ----------
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.3.0';
 
 // ---------- Almacenamiento local (nada sale del telefono) ----------
 const STORAGE_KEY = 'gastos_data_v1';
@@ -60,6 +60,10 @@ function fmt(n) {
 
 function fmtMoney(n) {
   return (n < 0 ? '-$' : '$') + fmt(Math.abs(n));
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
 // ---------- Viaje ----------
@@ -161,17 +165,31 @@ async function addDepositOnActiveTrip() {
     : `Depósito $${fmt(amount)} agregado`);
 }
 
-// ---------- Descripcion libre (categoria "Otro") ----------
+// ---------- Modal de texto libre (categoria "Otro", titulo del reporte) ----------
 const descModal = document.getElementById('desc-modal');
+const descModalTitle = document.getElementById('desc-modal-title');
 const descInput = document.getElementById('desc-input');
 let descResolve = null;
+let descEmptyMsg = 'Escribe una descripción';
 
-function askDescription() {
+function askTextModal({ heading, placeholder, prefill, emptyMsg }) {
   return new Promise((resolve) => {
     descResolve = resolve;
-    descInput.value = '';
+    descEmptyMsg = emptyMsg || 'Escribe un texto';
+    descModalTitle.textContent = heading;
+    descInput.placeholder = placeholder || '';
+    descInput.value = prefill || '';
     descModal.classList.add('show');
     descInput.focus();
+    descInput.select();
+  });
+}
+
+function askDescription() {
+  return askTextModal({
+    heading: 'Descripción del gasto',
+    placeholder: 'Ej. recarga celular, comida, herramienta',
+    emptyMsg: 'Escribe una descripción',
   });
 }
 
@@ -187,7 +205,7 @@ document.getElementById('desc-cancel').addEventListener('click', () => closeDesc
 document.getElementById('desc-save').addEventListener('click', () => {
   const text = descInput.value.trim();
   if (!text) {
-    showToast('Escribe una descripción');
+    showToast(descEmptyMsg);
     return;
   }
   closeDescModal(text);
@@ -339,11 +357,13 @@ function renderHistorial() {
       ? `<div class="trip-card-sub">Depósito $${fmt(deposit)} · Saldo <span class="${tripBalance(t) < 0 ? 'balance-neg' : ''}">$${fmt(tripBalance(t))}</span></div>`
       : '';
     const deleteBtn = active ? '' : `<button class="trip-del-btn" data-del="${t.id}">🗑️ Borrar</button>`;
+    const nameLine = t.name ? `<div class="trip-card-sub">${escapeHtml(t.name)}</div>` : '';
     return `<div class="trip-card ${active ? 'active-trip' : ''}" data-id="${t.id}">
       <div class="trip-card-top">
         <span>${date}${active ? ' · en curso' : ''}</span>
         <span>$${fmt(tripTotal(t))}</span>
       </div>
+      ${nameLine}
       <div class="trip-card-sub">${t.expenses.length} gasto${t.expenses.length === 1 ? '' : 's'}</div>
       ${depositLine}
       ${deleteBtn}
@@ -388,7 +408,7 @@ function renderDetalle() {
   const trip = getTrip(detalleTripId);
   if (!trip) { switchView('historial'); return; }
   const dateStart = new Date(trip.startedAt).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' });
-  detalleTituloEl.textContent = `Viaje del ${dateStart}`;
+  detalleTituloEl.textContent = trip.name ? trip.name : `Viaje del ${dateStart}`;
   detalleTotalEl.textContent = `Gastos: $${fmt(tripTotal(trip))} · ${trip.expenses.length} gasto(s)` + (trip.endedAt ? '' : ' · en curso');
 
   const deposit = depositsTotal(trip);
@@ -424,7 +444,7 @@ function renderDetalle() {
       <div class="item-left">
         <span>${catEmoji(it.category)}</span>
         <span>
-          <div>${it.category}</div>
+          <div>${escapeHtml(it.category || 'Gasto')}</div>
           <div class="item-cat">${time}</div>
         </span>
       </div>
@@ -478,7 +498,7 @@ function buildResumenTexto(trip) {
   let txt = `Reporte de gastos - Viaje del ${dateStart}\n\n`;
   items.forEach(it => {
     const time = new Date(it.timestamp).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
-    txt += `${time}  ${it.category.padEnd(16, ' ')} $${fmt(it.amount)}\n`;
+    txt += `${time}  ${String(it.category || 'Gasto').padEnd(16, ' ')} $${fmt(it.amount)}\n`;
   });
   txt += `\nTOTAL GASTOS: $${fmt(tripTotal(trip))}`;
   const deposits = [...(trip.deposits || [])].sort((a, b) => a.timestamp - b.timestamp);
@@ -497,20 +517,25 @@ function buildResumenTexto(trip) {
 }
 
 // ---------- Resumen en imagen (tabla, para compartir por WhatsApp) ----------
-function resumenTitulo(trip) {
+function resumenTituloDefault(trip) {
   const dateStart = new Date(trip.startedAt).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' });
   return `Gastos viaje ${dateStart}`;
+}
+
+function resumenTitulo(trip) {
+  return trip.name || resumenTituloDefault(trip);
 }
 
 function buildResumenFilas(trip) {
   const orden = [];
   const totales = {};
   trip.expenses.forEach(e => {
-    if (!(e.category in totales)) {
-      totales[e.category] = 0;
-      orden.push(e.category);
+    const cat = e.category || 'Gasto';
+    if (!(cat in totales)) {
+      totales[cat] = 0;
+      orden.push(cat);
     }
-    totales[e.category] += e.amount;
+    totales[cat] += (e.amount || 0);
   });
   const filas = orden.map(cat => ({ label: cat, amount: totales[cat] }));
   const deposit = depositsTotal(trip);
@@ -520,9 +545,9 @@ function buildResumenFilas(trip) {
   return filas;
 }
 
-function buildResumenImageBlob(trip) {
+function buildResumenImageBlob(trip, titulo) {
   const filas = buildResumenFilas(trip);
-  const titulo = resumenTitulo(trip);
+  titulo = titulo || resumenTitulo(trip);
 
   const width = 720;
   const rowH = 56;
@@ -580,41 +605,59 @@ function buildResumenImageBlob(trip) {
 document.getElementById('btn-copiar').addEventListener('click', async () => {
   const trip = getTrip(detalleTripId);
   if (!trip) return;
-  const txt = buildResumenTexto(trip);
   try {
+    const txt = buildResumenTexto(trip);
     await navigator.clipboard.writeText(txt);
     showToast('Resumen copiado');
   } catch (e) {
-    showToast('No se pudo copiar');
+    showToast('No se pudo copiar: ' + (e && e.message ? e.message : 'error desconocido'));
   }
 });
 
 document.getElementById('btn-compartir').addEventListener('click', async () => {
   const trip = getTrip(detalleTripId);
   if (!trip) return;
-  const blob = await buildResumenImageBlob(trip);
-  if (!blob) {
-    showToast('No se pudo generar la imagen');
-    return;
-  }
-  const file = new File([blob], 'gastos.png', { type: 'image/png' });
+  try {
+    const titulo = await askTextModal({
+      heading: 'Título del reporte',
+      placeholder: 'Ej. Viaje a Oaxaca',
+      prefill: resumenTitulo(trip),
+      emptyMsg: 'Escribe un título',
+    });
+    if (!titulo) return;
+    trip.name = titulo;
+    saveData();
+    renderDetalle();
 
-  if (navigator.canShare && navigator.canShare({ files: [file] })) {
-    try {
-      await navigator.share({ files: [file], title: 'Reporte de gastos' });
-    } catch (e) {
-      // usuario cancelo el dialogo de compartir: no hacer nada mas
+    const blob = await buildResumenImageBlob(trip, titulo);
+    if (blob) {
+      const file = new File([blob], 'gastos.png', { type: 'image/png' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: titulo });
+          return;
+        } catch (e) {
+          if (e && e.name === 'AbortError') return; // usuario cancelo el dialogo
+          // cualquier otro error: caemos al respaldo de abajo
+        }
+      }
     }
-    return;
-  }
 
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'gastos.png';
-  a.click();
-  URL.revokeObjectURL(url);
-  showToast('Imagen descargada (compartir no disponible)');
+    // Respaldo: el telefono no soporta compartir imagenes (o fallo generarla).
+    // Intentamos compartir el resumen como texto antes de rendirnos.
+    if (navigator.share) {
+      try {
+        await navigator.share({ text: buildResumenTexto(trip), title: titulo });
+        return;
+      } catch (e) {
+        if (e && e.name === 'AbortError') return;
+      }
+    }
+    await navigator.clipboard.writeText(buildResumenTexto(trip));
+    showToast('Tu teléfono no soporta compartir imágenes: se copió el resumen en texto');
+  } catch (e) {
+    showToast('No se pudo compartir: ' + (e && e.message ? e.message : 'error desconocido'));
+  }
 });
 
 document.getElementById('btn-borrar-viaje').addEventListener('click', () => {
@@ -685,6 +728,13 @@ async function checkForUpdate() {
       checksum: manifest.checksum,
     });
     await updater.next({ id: bundle.id });
+    // "next" solo deja la version lista para la proxima vez que la app pase a
+    // segundo plano o se reabra. Si no hay nada en curso (sin monto tecleado
+    // ni modal abierto), la aplicamos ya mismo para no depender de eso.
+    const modalAbierto = depositModal.classList.contains('show') || descModal.classList.contains('show');
+    if (amountStr === '0' && !modalAbierto && typeof updater.reload === 'function') {
+      await updater.reload();
+    }
   } catch (e) {
     // sin conexion o error de red: se sigue usando la version actual
   } finally {
