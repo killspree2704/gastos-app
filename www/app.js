@@ -1,5 +1,19 @@
 // ---------- Version de esta build (usada para detectar actualizaciones remotas) ----------
-const APP_VERSION = '1.4.1';
+const APP_VERSION = '1.5.0';
+
+// ---------- Iconografia (outline, trazo fino, hereda color via currentColor) ----------
+const ICONS = {
+  toll: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 3 5 21"/><path d="M15.5 3 19 21"/><path d="M12 3v2.5M12 9v2.5M12 15v2.5"/></svg>',
+  fuel: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16"/><path d="M4 21h10"/><path d="M9 10H7"/><path d="M14 8.5h2.5L19 11v6a1.5 1.5 0 0 1-3 0v-3h-2"/></svg>',
+  parking: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 16V8h3.2a2.4 2.4 0 1 1 0 4.8H9.5"/></svg>',
+  hotel: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 19v-6a2 2 0 0 1 2-2h5a2 2 0 0 1 2 2v2"/><path d="M3 21h18"/><path d="M12 15V8a2 2 0 0 1 2-2h5a2 2 0 0 1 2 2v7"/><circle cx="7" cy="12.5" r="1.3"/></svg>',
+  tag: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12.6 2.6 21 11a2 2 0 0 1 0 2.8l-7.2 7.2a2 2 0 0 1-2.8 0L2.6 12.6A2 2 0 0 1 2 11.2V4A1.4 1.4 0 0 1 3.4 2.6h7.8c.5 0 1 .2 1.4.6Z"/><circle cx="7.3" cy="7.3" r="1.2"/></svg>',
+  wallet: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="19" height="13" rx="2.3"/><path d="M2.5 10.2h19"/><circle cx="17" cy="14.3" r="1.1"/></svg>',
+  close: '<svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+  trash: '<svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9 7V4.5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1V7"/><path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/><path d="M10 11v6M14 11v6"/></svg>',
+  flag: '<svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v18"/><path d="M5 4h11l-2 4 2 4H5"/></svg>',
+  stop: '<svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="14" height="14" rx="2.5"/></svg>',
+};
 
 // ---------- Almacenamiento local (nada sale del telefono) ----------
 const STORAGE_KEY = 'gastos_data_v1';
@@ -238,27 +252,23 @@ function renderTripBar() {
     tripBar.classList.remove('trip-inactive');
     const mins = Math.max(0, Math.round((Date.now() - trip.startedAt) / 60000));
     tripStatusEl.textContent = `Viaje activo · ${mins} min`;
-    tripTotalEl.textContent = `Gastos: $${fmt(tripTotal(trip))}`;
+    tripTotalEl.innerHTML = `Gastos: <span class="money">$${fmt(tripTotal(trip))}</span>`;
     const deposit = depositsTotal(trip);
     if (deposit > 0) {
       const balance = tripBalance(trip);
-      tripDepositEl.textContent = `Depósitos: $${fmt(deposit)} · Saldo: $${fmt(balance)}`;
-      tripDepositEl.classList.toggle('balance-neg', balance < 0);
+      const balanceClass = balance < 0 ? 'money balance-neg' : 'money accent';
+      tripDepositEl.innerHTML = `Depósitos: <span class="money">$${fmt(deposit)}</span> · Saldo: <span class="${balanceClass}">$${fmt(balance)}</span>`;
     } else {
       tripDepositEl.textContent = 'Sin depósito registrado';
-      tripDepositEl.classList.remove('balance-neg');
     }
-    tripDepositBtn.textContent = 'Agregar depósito';
-    tripToggleBtn.textContent = 'Terminar viaje';
+    tripToggleBtn.innerHTML = `${ICONS.stop}Terminar viaje`;
   } else {
     tripBar.classList.remove('trip-active');
     tripBar.classList.add('trip-inactive');
     tripStatusEl.textContent = 'Sin viaje activo';
     tripTotalEl.textContent = '';
     tripDepositEl.textContent = '';
-    tripDepositEl.classList.remove('balance-neg');
-    tripToggleBtn.textContent = 'Iniciar viaje';
-    tripDepositBtn.textContent = 'Agregar depósito';
+    tripToggleBtn.innerHTML = `${ICONS.flag}Iniciar viaje`;
   }
 }
 
@@ -360,14 +370,14 @@ function renderHistorial() {
     const active = !t.endedAt;
     const deposit = depositsTotal(t);
     const depositLine = deposit > 0
-      ? `<div class="trip-card-sub">Depósito $${fmt(deposit)} · Saldo <span class="${tripBalance(t) < 0 ? 'balance-neg' : ''}">$${fmt(tripBalance(t))}</span></div>`
+      ? `<div class="trip-card-sub">Depósito $${fmt(deposit)} · Saldo <span class="money ${tripBalance(t) < 0 ? 'balance-neg' : 'accent'}">$${fmt(tripBalance(t))}</span></div>`
       : '';
-    const deleteBtn = active ? '' : `<button class="trip-del-btn" data-del="${t.id}">🗑️ Borrar</button>`;
+    const deleteBtn = active ? '' : `<button class="trip-del-btn" data-del="${t.id}">${ICONS.trash}Borrar</button>`;
     const nameLine = t.name ? `<div class="trip-card-sub">${escapeHtml(t.name)}</div>` : '';
     return `<div class="trip-card ${active ? 'active-trip' : ''}" data-id="${t.id}">
       <div class="trip-card-top">
         <span>${date}${active ? ' · en curso' : ''}</span>
-        <span>$${fmt(tripTotal(t))}</span>
+        <span class="trip-card-amount money">$${fmt(tripTotal(t))}</span>
       </div>
       ${nameLine}
       <div class="trip-card-sub">${t.expenses.length} gasto${t.expenses.length === 1 ? '' : 's'}</div>
@@ -405,9 +415,9 @@ function openDetalle(tripId) {
   renderDetalle();
 }
 
-function catEmoji(cat) {
-  const map = { Caseta: '🛣️', Gasolina: '⛽', Estacionamiento: '🅿️', Hotel: '🏨' };
-  return map[cat] || '💵';
+function catIcon(cat) {
+  const map = { Caseta: ICONS.toll, Gasolina: ICONS.fuel, Estacionamiento: ICONS.parking, Hotel: ICONS.hotel };
+  return map[cat] || ICONS.tag;
 }
 
 function renderDetalle() {
@@ -415,12 +425,13 @@ function renderDetalle() {
   if (!trip) { switchView('historial'); return; }
   const dateStart = new Date(trip.startedAt).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' });
   detalleTituloEl.textContent = trip.name ? trip.name : `Viaje del ${dateStart}`;
-  detalleTotalEl.textContent = `Gastos: $${fmt(tripTotal(trip))} · ${trip.expenses.length} gasto(s)` + (trip.endedAt ? '' : ' · en curso');
+  detalleTotalEl.innerHTML = `Gastos: <span class="money">$${fmt(tripTotal(trip))}</span> · ${trip.expenses.length} gasto(s)` + (trip.endedAt ? '' : ' · en curso');
 
   const deposit = depositsTotal(trip);
   if (deposit > 0) {
     const balance = tripBalance(trip);
-    detalleDepositoEl.innerHTML = `Depósitos: $${fmt(deposit)} · Saldo: <span class="${balance < 0 ? 'balance-neg' : ''}">$${fmt(balance)}</span>`;
+    const balanceClass = balance < 0 ? 'money balance-neg' : 'money accent';
+    detalleDepositoEl.innerHTML = `Depósitos: <span class="money">$${fmt(deposit)}</span> · Saldo: <span class="${balanceClass}">$${fmt(balance)}</span>`;
   } else {
     detalleDepositoEl.textContent = 'Sin depósito registrado';
   }
@@ -430,7 +441,7 @@ function renderDetalle() {
     const time = new Date(d.timestamp).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
     return `<div class="item-row" data-id="${d.id}">
       <div class="item-left">
-        <span>💰</span>
+        ${ICONS.wallet}
         <span>
           <div>Depósito</div>
           <div class="item-cat">${time}</div>
@@ -438,7 +449,7 @@ function renderDetalle() {
       </div>
       <div style="display:flex;align-items:center;gap:8px;">
         <span class="item-amount">$${fmt(d.amount)}</span>
-        <button class="item-del" data-del="${d.id}">✕</button>
+        <button class="item-del" data-del="${d.id}">${ICONS.close}</button>
       </div>
     </div>`;
   }).join('');
@@ -448,7 +459,7 @@ function renderDetalle() {
     const time = new Date(it.timestamp).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
     return `<div class="item-row" data-id="${it.id}">
       <div class="item-left">
-        <span>${catEmoji(it.category)}</span>
+        ${catIcon(it.category)}
         <span>
           <div>${escapeHtml(it.category || 'Gasto')}</div>
           <div class="item-cat">${time}</div>
@@ -456,7 +467,7 @@ function renderDetalle() {
       </div>
       <div style="display:flex;align-items:center;gap:8px;">
         <span class="item-amount">$${fmt(it.amount)}</span>
-        <button class="item-del" data-del="${it.id}">✕</button>
+        <button class="item-del" data-del="${it.id}">${ICONS.close}</button>
       </div>
     </div>`;
   }).join('') || '<div class="empty-msg">Sin gastos en este viaje</div>';
@@ -573,9 +584,19 @@ function buildResumenFilas(trip) {
   return filas;
 }
 
-function buildResumenImageBlob(trip, titulo) {
+async function buildResumenImageBlob(trip, titulo) {
   const filas = buildResumenFilas(trip);
   titulo = titulo || resumenTitulo(trip);
+
+  try {
+    await Promise.all([
+      document.fonts.load('700 28px Inter'),
+      document.fonts.load('400 26px Inter'),
+      document.fonts.load('600 26px Inter'),
+    ]);
+  } catch (e) {
+    // si la fuente no cargo a tiempo, el canvas cae a sans-serif del sistema
+  }
 
   const width = 720;
   const rowH = 56;
@@ -598,7 +619,7 @@ function buildResumenImageBlob(trip, titulo) {
 
   ctx.strokeRect(1, 1, width - 2, height - 2);
 
-  ctx.font = 'bold 28px sans-serif';
+  ctx.font = '700 28px Inter, sans-serif';
   ctx.textAlign = 'left';
   ctx.fillText(titulo, 16, headerH / 2);
   ctx.beginPath();
@@ -606,7 +627,6 @@ function buildResumenImageBlob(trip, titulo) {
   ctx.lineTo(width, headerH);
   ctx.stroke();
 
-  ctx.font = '26px sans-serif';
   filas.forEach((f, i) => {
     const y = headerH + i * rowH;
     if (i > 0) {
@@ -620,9 +640,11 @@ function buildResumenImageBlob(trip, titulo) {
     ctx.lineTo(colX, y + rowH);
     ctx.stroke();
 
+    ctx.font = '400 26px Inter, sans-serif';
     ctx.textAlign = 'left';
     ctx.fillText(f.label, 16, y + rowH / 2);
 
+    ctx.font = '600 26px Inter, sans-serif';
     ctx.textAlign = 'right';
     ctx.fillText(fmtMoney(f.amount), width - 16, y + rowH / 2);
   });
